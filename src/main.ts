@@ -22,6 +22,15 @@ const vuetify = createVuetify({
           background: '#0A0A0F',
         },
       },
+      light: {
+        dark: false,
+        colors: {
+          primary: '#0097A7',
+          secondary: '#5E35B1',
+          surface: '#FFFFFF',
+          background: '#F0F2F5',
+        },
+      },
     },
   },
   icons: {

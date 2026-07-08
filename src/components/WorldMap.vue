@@ -1,7 +1,7 @@
 <template>
   <v-card elevation="0" rounded="lg" class="map-card">
-    <!-- Metric toggle -->
-    <div class="map-toolbar pa-3 pb-0">
+    <!-- Metric toggle + Country picker -->
+    <div class="map-toolbar">
       <v-btn-toggle
         :model-value="metric"
         mandatory
@@ -15,7 +15,23 @@
         <v-btn value="songs" size="small" prepend-icon="mdi-music-note">Songs</v-btn>
         <v-btn value="albums" size="small" prepend-icon="mdi-album">Albums</v-btn>
       </v-btn-toggle>
-      <div class="map-hint">Top 10 pins · click for details</div>
+
+      <span class="map-hint">Top 10 pins · click for details</span>
+
+      <v-select
+        :model-value="selectedCountry"
+        :items="countryOptions"
+        item-title="name"
+        item-value="code"
+        density="compact"
+        variant="outlined"
+        hide-details
+        rounded="pill"
+        prepend-inner-icon="mdi-earth"
+        style="max-width: 190px;"
+        color="primary"
+        @update:model-value="$emit('update:selectedCountry', $event)"
+      />
     </div>
 
     <!-- Map container -->
@@ -70,8 +86,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useTheme } from 'vuetify'
 import L from 'leaflet'
-import type { Map as LeafletMap, Marker } from 'leaflet'
+import type { Map as LeafletMap, Marker, TileLayer } from 'leaflet'
 import type { Artist, Song, Album, Metric } from '../types'
 
 const props = defineProps<{
@@ -87,16 +104,37 @@ const props = defineProps<{
   globalTopSongs: Song[]
   globalTopAlbums: Album[]
   allAlbums: Album[]
+  countryOptions: { code: string; name: string }[]
 }>()
 
 const emit = defineEmits<{
   'update:metric': [value: Metric]
+  'update:selectedCountry': [value: string]
   'addToPlaylist': [song: Song]
 }>()
 
 const mapContainer = ref<HTMLElement | null>(null)
 let map: LeafletMap | null = null
 const markers: Marker[] = []
+let tileLayerRef: TileLayer | null = null
+
+const theme = useTheme()
+
+function getTileUrl(isDark: boolean) {
+  return isDark
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+}
+
+function updateTileLayer() {
+  if (!map) return
+  if (tileLayerRef) { tileLayerRef.remove(); tileLayerRef = null }
+  tileLayerRef = L.tileLayer(getTileUrl(theme.global.current.value.dark), {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 19,
+  }).addTo(map)
+}
 
 // Discography modal state
 const showDiscography = ref(false)
@@ -525,11 +563,7 @@ onMounted(() => {
     maxZoom: 12,
   })
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-    subdomains: 'abcd',
-    maxZoom: 19,
-  }).addTo(map)
+  updateTileLayer()
 
   // Wire popup button clicks (Add to Playlist + See Discography)
   map.on('popupopen', (e) => {
@@ -567,11 +601,12 @@ onBeforeUnmount(() => {
 watch(() => props.metric, () => placeMarkers())
 watch(() => [props.topArtists, props.topSongs, props.topAlbums], () => placeMarkers(), { deep: true })
 watch(() => [props.selectedCountry, props.countryLat, props.countryLng], flyToCountry)
+watch(() => theme.global.current.value.dark, () => updateTileLayer())
 </script>
 <style scoped>
 .map-card {
-  background: #13131A !important;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgb(var(--v-theme-surface)) !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
   overflow: hidden;
   height: 100%;
   min-height: 500px;
@@ -586,9 +621,11 @@ watch(() => [props.selectedCountry, props.countryLat, props.countryLng], flyToCo
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 12px 16px;
   flex-shrink: 0;
-  background: #13131A;
+  background: rgb(var(--v-theme-surface));
   z-index: 1;
+  gap: 12px;
 }
 
 .metric-toggle :deep(.v-btn) {
@@ -597,7 +634,7 @@ watch(() => [props.selectedCountry, props.countryLat, props.countryLng], flyToCo
 
 .map-hint {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.25);
+  color: rgba(var(--v-theme-on-surface), 0.3);
 }
 
 .map-container {
@@ -607,8 +644,8 @@ watch(() => [props.selectedCountry, props.countryLat, props.countryLng], flyToCo
 
 /* Discography modal */
 .discography-card {
-  background: #13131A !important;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgb(var(--v-theme-surface)) !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .discography-header {
@@ -708,7 +745,6 @@ watch(() => [props.selectedCountry, props.countryLat, props.countryLng], flyToCo
 .dark-popup .leaflet-popup-tip {
   background: #1a1a2e;
 }
-
 .dark-popup .leaflet-popup-content {
   margin: 10px 14px;
 }

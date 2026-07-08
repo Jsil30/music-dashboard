@@ -1,13 +1,13 @@
 <template>
-  <v-app theme="dark" :style="{ background: '#0A0A0F' }">
+  <v-app :theme="appTheme" :style="{ background: appBg }">
     <!-- App Bar -->
     <v-app-bar
       flat
-      :style="{ background: 'rgba(13,13,26,0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }"
+      :style="{ background: appBarBg, backdropFilter: 'blur(12px)', borderBottom: appBarBorder }"
       height="64"
     >
       <template #prepend>
-        <v-icon color="primary" size="26" class="ml-2">mdi-equalizer</v-icon>
+        <v-icon color="primary" size="26">mdi-equalizer</v-icon>
       </template>
 
       <v-app-bar-title class="app-title">
@@ -35,31 +35,24 @@
         </v-btn>
       </v-btn-toggle>
 
-      <!-- Country Picker -->
-      <v-select
-        v-model="selectedCountry"
-        :items="countryOptions"
-        item-title="name"
-        item-value="code"
-        density="compact"
-        variant="outlined"
-        hide-details
-        rounded="pill"
-        prepend-inner-icon="mdi-earth"
-        class="country-picker mx-3"
-        style="max-width: 200px;"
-        color="primary"
+      <!-- Theme toggle -->
+      <v-btn
+        :icon="appTheme === 'dark' ? 'mdi-weather-sunny' : 'mdi-weather-night'"
+        variant="text"
+        size="small"
+        class="ml-2"
+        @click="toggleTheme"
       />
     </v-app-bar>
 
     <!-- Main content -->
-    <v-main :style="{ background: '#0A0A0F', paddingTop: '64px' }">
+    <v-main :style="{ background: appBg, paddingTop: '64px', paddingLeft: '0', paddingRight: '0' }">
       <!-- Home View -->
       <div v-if="currentView === 'home'" class="home-layout">
-        <v-container fluid class="pa-4 pa-md-6">
+        <v-container fluid class="py-4 py-sm-6 py-lg-10 px-4 px-sm-6 px-lg-10">
           <v-row>
             <!-- Left: Summary Cards -->
-            <v-col cols="12" lg="4" class="d-flex flex-column gap-4">
+            <v-col cols="12" lg="4">
               <SummaryCards
                 :top-artists="currentData.topArtists"
                 :top-songs="currentData.topSongs"
@@ -68,40 +61,6 @@
                 :trend-percent="currentData.trendPercent"
                 @add-to-playlist="addToPlaylist"
               />
-
-              <!-- Add to playlist quick-add -->
-              <v-card elevation="0" rounded="lg" class="quick-add-card mt-2">
-                <v-card-text class="pa-4">
-                  <div class="card-label mb-3">
-                    <v-icon color="primary" size="18">mdi-playlist-plus</v-icon>
-                    <span class="ml-2">Add to Playlist</span>
-                  </div>
-                  <v-select
-                    v-model="selectedSongToAdd"
-                    :items="currentData.topSongs"
-                    :item-title="(s: any) => `${s.title} — ${s.artist}`"
-                    item-value="id"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    placeholder="Pick a song…"
-                    color="primary"
-                    class="mb-3"
-                    return-object
-                  />
-                  <v-btn
-                    block
-                    color="primary"
-                    variant="tonal"
-                    :disabled="!selectedSongToAdd"
-                    prepend-icon="mdi-plus"
-                    rounded="pill"
-                    @click="addSelectedSong"
-                  >
-                    Add Song
-                  </v-btn>
-                </v-card-text>
-              </v-card>
             </v-col>
 
             <!-- Right: Map -->
@@ -119,7 +78,9 @@
                 :global-top-songs="metrics.global.topSongs"
                 :global-top-albums="metrics.global.topAlbums"
                 :all-albums="allAlbums"
+                :country-options="countryOptions"
                 @update:metric="mapMetric = $event"
+                @update:selected-country="selectedCountry = $event"
                 @add-to-playlist="addToPlaylist"
               />
             </v-col>
@@ -151,22 +112,41 @@ import metricsRaw from './data/metrics.json'
 import SummaryCards from './components/SummaryCards.vue'
 import WorldMap from './components/WorldMap.vue'
 import PlaylistView from './components/PlaylistView.vue'
+import { useTheme } from 'vuetify'
 import type { Metrics, Metric, PlaylistItem, Song } from './types'
 
 const metrics = metricsRaw as unknown as Metrics
+const theme = useTheme()
+
+const appTheme = computed(() => theme.global.name.value)
+
+function toggleTheme() {
+  theme.change(theme.global.current.value.dark ? 'light' : 'dark')
+}
+
+const appBg = computed(() => theme.global.current.value.dark ? '#0A0A0F' : '#F0F2F5')
+const appBarBg = computed(() =>
+  theme.global.current.value.dark ? 'rgba(13,13,26,0.95)' : 'rgba(255,255,255,0.95)'
+)
+const appBarBorder = computed(() =>
+  theme.global.current.value.dark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.08)'
+)
 
 const currentView = ref<'home' | 'playlist'>('home')
 const selectedCountry = ref<string>('ALL')
 const mapMetric = ref<Metric>('artists')
 const playlist = ref<PlaylistItem[]>([])
-const selectedSongToAdd = ref<Song | null>(null)
 const snack = ref({ show: false, text: '' })
+
+// Convert ISO 3166-1 alpha-2 code to flag emoji
+const flagEmoji = (code: string) =>
+  [...code.toUpperCase()].map(c => String.fromCodePoint(c.charCodeAt(0) + 127397)).join('')
 
 const countryOptions = computed(() => [
   { code: 'ALL', name: '🌍 All Countries' },
   ...Object.entries(metrics.countries).map(([code, c]) => ({
     code,
-    name: c.name,
+    name: `${flagEmoji(code)} ${c.name}`,
   })),
 ])
 
@@ -227,12 +207,6 @@ function addToPlaylist(song: Song) {
   snack.value = { show: true, text: `Added "${song.title}" to playlist` }
 }
 
-function addSelectedSong() {
-  if (!selectedSongToAdd.value) return
-  addToPlaylist(selectedSongToAdd.value)
-  selectedSongToAdd.value = null
-}
-
 function removeFromPlaylist(id: string) {
   playlist.value = playlist.value.filter(p => p.id !== id)
 }
@@ -243,7 +217,7 @@ function removeFromPlaylist(id: string) {
   font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  color: rgba(255,255,255,0.9);
+  color: rgba(var(--v-theme-on-surface), 0.9);
 }
 
 .title-accent {
@@ -265,11 +239,6 @@ function removeFromPlaylist(id: string) {
   color: rgba(255,255,255,0.45);
 }
 
-.quick-add-card {
-  background: #13131A !important;
-  border: 1px solid rgba(255,255,255,0.06);
-}
-
 :deep(.country-picker .v-field) {
   font-size: 13px;
 }
@@ -277,5 +246,26 @@ function removeFromPlaylist(id: string) {
 :deep(.v-btn-toggle .v-btn) {
   font-size: 12px;
   font-weight: 500;
+}
+
+/* ── Responsive app bar horizontal padding ───────────────────
+   Mirrors the container's px-4 / px-sm-6 / px-lg-10 so the
+   icon and content always start / end at the same x position. */
+:deep(.v-toolbar__prepend) {
+  padding-left: 16px;
+  margin-right: 4px;
+}
+:deep(.v-toolbar__content) {
+  padding-right: 16px;
+}
+
+@media (min-width: 600px) {
+  :deep(.v-toolbar__prepend) { padding-left: 24px; }
+  :deep(.v-toolbar__content) { padding-right: 24px; }
+}
+
+@media (min-width: 1280px) {
+  :deep(.v-toolbar__prepend) { padding-left: 40px; }
+  :deep(.v-toolbar__content) { padding-right: 40px; }
 }
 </style>
